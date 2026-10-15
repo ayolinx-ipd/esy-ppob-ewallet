@@ -32,11 +32,11 @@ sequenceDiagram
         else VA ditemukan
             SO-->>AY: Inquiry found + data VA + billDetails + nominal
             AY->>AY: Daftarkan VA di Ayolinx
-            AY->>AY: Catat billDetails transaksi
             AY-->>BI: Inquiry berhasil + detail tagihan + nominal
 
             BI->>AY: Hit API payment (VA, nominal, reference ID)
             AY->>AY: Catat transaksi payment dengan status diproses
+            AY->>AY: Catat billDetails transaksi
             AY->>SO: Hit API payment (VA, nominal, reference ID)
             SO-->>AY: Hasil payment atau timeout/error
 
@@ -80,10 +80,10 @@ sequenceDiagram
 2. Bank Issuer mengirimkan inquiry VA ke Ayolinx. Ayolinx memeriksa kode biller VA.
 3. Jika kode biller adalah SedayuOne, Ayolinx meneruskan inquiry ke API SedayuOne.
 4. Jika VA tidak ditemukan, respons `inquiry not found` dikembalikan ke Bank Issuer dan Customer. Proses berhenti sebelum payment.
-5. Jika VA ditemukan, SedayuOne mengembalikan data VA, `billDetails`, dan nominal. Ayolinx mendaftarkan VA serta mencatat `billDetails` transaksi sebelum mengembalikan inquiry berhasil ke Bank Issuer.
-6. Bank Issuer memanggil API payment Ayolinx. Ayolinx mencatat transaksi dan meneruskan payment ke API SedayuOne.
+5. Jika VA ditemukan, SedayuOne mengembalikan data VA, `billDetails`, dan nominal. Ayolinx mendaftarkan VA sebelum mengembalikan inquiry berhasil ke Bank Issuer.
+6. Bank Issuer memanggil API payment Ayolinx. Ayolinx mencatat transaksi payment dengan status diproses beserta `billDetails` transaksi, lalu meneruskan payment ke API SedayuOne.
 7. Jika terjadi gangguan sementara yang dapat di-retry, Ayolinx mengulangi panggilan payment maksimal tiga kali. Retry berhenti segera setelah sukses atau setelah menerima kegagalan definitif.
-8. Setelah SedayuOne mengonfirmasi payment sukses, Ayolinx mencatat status sukses dan mengembalikannya ke Bank Issuer, lalu Bank Issuer menampilkan status sukses kepada Customer.
+8. Setelah SedayuOne mengonfirmasi payment sukses, Ayolinx memperbarui status transaksi menjadi sukses. Ayolinx kemudian mengembalikan status sukses ke Bank Issuer, lalu Bank Issuer menampilkan status sukses kepada Customer.
 9. Jika payment ditolak secara definitif, status gagal dikembalikan. Jika percobaan habis tetapi hasilnya belum diketahui, status pending dikembalikan untuk ditindaklanjuti melalui rekonsiliasi.
 10. Jika kode biller bukan SedayuOne, Ayolinx menjalankan proses inquiry VA reguler Ayolinx. Jika inquiry berhasil, Bank Issuer melanjutkan ke API payment dan Ayolinx memproses pembayaran melalui alur VA reguler. Hasil payment dikembalikan ke Bank Issuer dan Customer. Jika inquiry tidak berhasil, pembayaran tidak dilanjutkan. Cabang ini mengikuti mekanisme VA reguler Ayolinx tanpa memanggil API SedayuOne.
 
