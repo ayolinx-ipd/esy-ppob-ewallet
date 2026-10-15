@@ -1,11 +1,11 @@
-# Sequence Diagram Inquiry dan Payment VA SedayuOne
+# SedayuOne VA Inquiry and Payment Sequence Diagram
 
-## Aktor
+## Actors
 
-1. **Customer** — pelanggan yang membayar Virtual Account (VA).
-2. **Bank Issuer** — bank yang mengirimkan inquiry dan payment ke Ayolinx.
-3. **Ayolinx** — memeriksa kode biller, mendaftarkan VA, menyimpan `billDetails`, dan meneruskan payment.
-4. **SedayuOne** — menyediakan data tagihan VA dan memproses payment.
+1. **Customer** — the customer paying a Virtual Account (VA).
+2. **Bank Issuer** — the bank sending inquiry and payment requests to Ayolinx.
+3. **Ayolinx** — checks the biller code, registers the VA, stores `billDetails`, and forwards the payment.
+4. **SedayuOne** — provides VA billing data and processes the payment.
 
 ## Diagram
 
@@ -17,80 +17,80 @@ sequenceDiagram
     participant AY as Ayolinx
     participant SO as SedayuOne
 
-    C->>BI: Melakukan pembayaran VA
-    BI->>AY: Inquiry VA (nomor VA)
-    AY->>AY: Periksa kode biller pada nomor VA
+    C->>BI: Make a VA payment
+    BI->>AY: VA inquiry (VA number)
+    AY->>AY: Check the biller code in the VA number
 
-    alt Kode biller SedayuOne
-        AY->>SO: Hit API inquiry VA
-        SO->>SO: Cari VA dan data tagihan
+    alt SedayuOne biller code
+        AY->>SO: Call the VA inquiry API
+        SO->>SO: Look up the VA and billing data
 
-        alt VA tidak ditemukan
+        alt VA not found
             SO-->>AY: Inquiry not found
             AY-->>BI: Inquiry not found
-            BI-->>C: VA tidak ditemukan, pembayaran tidak dilanjutkan
-        else VA ditemukan
-            SO-->>AY: Inquiry found + data VA + billDetails + nominal
-            AY->>AY: Daftarkan VA di Ayolinx
-            AY-->>BI: Inquiry berhasil + detail tagihan + nominal
+            BI-->>C: VA not found, payment does not proceed
+        else VA found
+            SO-->>AY: Inquiry found + VA data + billDetails + amount
+            AY->>AY: Register the VA in Ayolinx
+            AY-->>BI: Inquiry successful + billing details + amount
 
-            BI->>AY: Hit API payment (VA, nominal, reference ID)
-            AY->>AY: Catat transaksi payment dengan status diproses
-            AY->>AY: Catat billDetails transaksi
-            AY->>SO: Hit API payment (VA, nominal, reference ID)
-            SO-->>AY: Hasil payment atau timeout/error
+            BI->>AY: Call the payment API (VA, amount, reference ID)
+            AY->>AY: Record the payment transaction with processing status
+            AY->>AY: Record the transaction billDetails
+            AY->>SO: Call the payment API (VA, amount, reference ID)
+            SO-->>AY: Payment result or timeout/error
 
-            loop Maksimal 3 retry selama belum sukses dan error dapat di-retry
-                Note over AY,SO: Berhenti retry saat sukses atau menerima kegagalan definitif
-                AY->>SO: Retry API payment dengan reference ID yang sama
-                SO-->>AY: Hasil payment atau timeout/error
+            loop Up to 3 retries while unsuccessful and the error is retryable
+                Note over AY,SO: Stop retrying upon success or a definitive failure
+                AY->>SO: Retry the payment API with the same reference ID
+                SO-->>AY: Payment result or timeout/error
             end
 
-            alt Payment dikonfirmasi sukses oleh SedayuOne
-                AY->>AY: Perbarui status transaksi menjadi sukses
-                AY-->>BI: Payment sukses
-                BI-->>C: Pembayaran sukses
-            else Payment ditolak secara definitif oleh SedayuOne
-                AY->>AY: Catat status transaksi gagal
-                AY-->>BI: Payment gagal + alasan
-                BI-->>C: Pembayaran gagal
-            else Retry habis dan hasil payment belum dapat dipastikan
-                AY->>AY: Catat status pending untuk rekonsiliasi
-                AY-->>BI: Payment pending / belum terkonfirmasi
-                BI-->>C: Pembayaran belum terkonfirmasi
+            alt Payment confirmed successful by SedayuOne
+                AY->>AY: Update the transaction status to successful
+                AY-->>BI: Payment successful
+                BI-->>C: Payment successful
+            else Payment definitively rejected by SedayuOne
+                AY->>AY: Record the transaction status as failed
+                AY-->>BI: Payment failed + reason
+                BI-->>C: Payment failed
+            else Retries exhausted and the payment outcome remains uncertain
+                AY->>AY: Record pending status for reconciliation
+                AY-->>BI: Payment pending / unconfirmed
+                BI-->>C: Payment unconfirmed
             end
         end
-    else Kode biller bukan SedayuOne
-        AY->>AY: Proses inquiry VA reguler Ayolinx
-        AY-->>BI: Hasil inquiry VA reguler
-        alt Inquiry VA reguler berhasil
-            BI->>AY: Hit API payment VA reguler
-            AY->>AY: Proses payment VA reguler Ayolinx
-            AY-->>BI: Hasil payment VA reguler
-            BI-->>C: Status pembayaran sesuai hasil payment reguler
-        else Inquiry VA reguler tidak berhasil
-            BI-->>C: Informasi hasil inquiry, pembayaran tidak dilanjutkan
+    else Non-SedayuOne biller code
+        AY->>AY: Process the regular Ayolinx VA inquiry
+        AY-->>BI: Regular VA inquiry result
+        alt Regular VA inquiry successful
+            BI->>AY: Call the regular VA payment API
+            AY->>AY: Process the regular Ayolinx VA payment
+            AY-->>BI: Regular VA payment result
+            BI-->>C: Payment status based on the regular payment result
+        else Regular VA inquiry unsuccessful
+            BI-->>C: Inquiry result, payment does not proceed
         end
     end
 ```
 
-## Urutan Proses
+## Process Flow
 
-1. Customer melakukan pembayaran VA melalui Bank Issuer.
-2. Bank Issuer mengirimkan inquiry VA ke Ayolinx. Ayolinx memeriksa kode biller VA.
-3. Jika kode biller adalah SedayuOne, Ayolinx meneruskan inquiry ke API SedayuOne.
-4. Jika VA tidak ditemukan, respons `inquiry not found` dikembalikan ke Bank Issuer dan Customer. Proses berhenti sebelum payment.
-5. Jika VA ditemukan, SedayuOne mengembalikan data VA, `billDetails`, dan nominal. Ayolinx mendaftarkan VA sebelum mengembalikan inquiry berhasil ke Bank Issuer.
-6. Bank Issuer memanggil API payment Ayolinx. Ayolinx mencatat transaksi payment dengan status diproses beserta `billDetails` transaksi, lalu meneruskan payment ke API SedayuOne.
-7. Jika terjadi gangguan sementara yang dapat di-retry, Ayolinx mengulangi panggilan payment maksimal tiga kali. Retry berhenti segera setelah sukses atau setelah menerima kegagalan definitif.
-8. Setelah SedayuOne mengonfirmasi payment sukses, Ayolinx memperbarui status transaksi menjadi sukses. Ayolinx kemudian mengembalikan status sukses ke Bank Issuer, lalu Bank Issuer menampilkan status sukses kepada Customer.
-9. Jika payment ditolak secara definitif, status gagal dikembalikan. Jika percobaan habis tetapi hasilnya belum diketahui, status pending dikembalikan untuk ditindaklanjuti melalui rekonsiliasi.
-10. Jika kode biller bukan SedayuOne, Ayolinx menjalankan proses inquiry VA reguler Ayolinx. Jika inquiry berhasil, Bank Issuer melanjutkan ke API payment dan Ayolinx memproses pembayaran melalui alur VA reguler. Hasil payment dikembalikan ke Bank Issuer dan Customer. Jika inquiry tidak berhasil, pembayaran tidak dilanjutkan. Cabang ini mengikuti mekanisme VA reguler Ayolinx tanpa memanggil API SedayuOne.
+1. The Customer makes a VA payment through the Bank Issuer.
+2. The Bank Issuer sends a VA inquiry to Ayolinx. Ayolinx checks the VA biller code.
+3. If the biller code belongs to SedayuOne, Ayolinx forwards the inquiry to the SedayuOne API.
+4. If the VA is not found, an `inquiry not found` response is returned to the Bank Issuer and the Customer. The process stops before payment.
+5. If the VA is found, SedayuOne returns the VA data, `billDetails`, and amount. Ayolinx registers the VA before returning a successful inquiry response to the Bank Issuer.
+6. The Bank Issuer calls the Ayolinx payment API. Ayolinx records the payment transaction with processing status and the transaction `billDetails`, then forwards the payment to the SedayuOne API.
+7. If a retryable temporary error occurs, Ayolinx retries the payment call up to three times. Retries stop immediately upon success or a definitive failure.
+8. Once SedayuOne confirms that the payment is successful, Ayolinx updates the transaction status to successful. Ayolinx then returns the successful status to the Bank Issuer, which displays the successful status to the Customer.
+9. If the payment is definitively rejected, a failed status is returned. If all attempts are exhausted but the outcome remains unknown, a pending status is returned for follow-up through reconciliation.
+10. If the biller code does not belong to SedayuOne, Ayolinx follows its regular VA inquiry process. If the inquiry succeeds, the Bank Issuer proceeds to the payment API and Ayolinx processes the payment through its regular VA flow. The payment result is returned to the Bank Issuer and the Customer. If the inquiry is unsuccessful, payment does not proceed. This branch follows the regular Ayolinx VA mechanism without calling the SedayuOne API.
 
-## Ketentuan Retry
+## Retry Rules
 
-- **Asumsi jumlah percobaan:** satu panggilan awal ditambah maksimal **tiga retry**, sehingga total maksimal empat panggilan payment ke SedayuOne.
-- Retry hanya dilakukan untuk gangguan sementara, misalnya timeout atau error sementara yang disepakati dapat di-retry. Penolakan bisnis yang definitif tidak di-retry.
-- Semua retry untuk transaksi yang sama menggunakan **reference ID / idempotency key yang sama**. SedayuOne perlu memprosesnya secara idempoten agar pembayaran tidak tercatat ganda.
-- Timeout tidak otomatis berarti payment gagal; transaksi mungkin sudah diproses SedayuOne. Hasil yang belum pasti dicatat sebagai pending sampai rekonsiliasi memastikan statusnya.
-- Jeda retry, batas timeout, pemetaan kode respons, serta mekanisme rekonsiliasi mengikuti kesepakatan integrasi Ayolinx dan SedayuOne.
+- **Attempt count assumption:** one initial call plus up to **three retries**, for a maximum of four payment calls to SedayuOne.
+- Retries apply only to temporary issues, such as timeouts or temporary errors agreed to be retryable. Definitive business rejections are not retried.
+- All retries for the same transaction use the **same reference ID / idempotency key**. SedayuOne must process them idempotently to prevent duplicate payment records.
+- A timeout does not automatically mean the payment failed; SedayuOne may already have processed the transaction. An uncertain outcome is recorded as pending until reconciliation confirms its status.
+- Retry intervals, timeout limits, response code mappings, and the reconciliation mechanism follow the integration agreement between Ayolinx and SedayuOne.
